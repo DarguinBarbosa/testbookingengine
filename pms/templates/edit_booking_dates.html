@@ -1,0 +1,32 @@
+{% extends "main.html"%}
+
+{% block content %}
+<h1>Editar fechas de reserva: {{booking.code}}</h1>
+
+{% if error %}
+<div class="alert alert-danger" role="alert">
+    {{ error }}
+</div>
+{% endif %}
+
+<form action="" method="post">
+    {% csrf_token %}
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label for="checkin" class="form-label">Fecha de entrada</label>
+            <input type="date" class="form-control" id="checkin" name="checkin" value="{{ checkin_str }}" required>
+        </div>
+        <div class="col-md-6">
+            <label for="checkout" class="form-label">Fecha de salida</label>
+            <input type="date" class="form-control" id="checkout" name="checkout" value="{{ checkout_str }}" required>
+        </div>
+    </div>
+    
+    <div class="mb-3">
+        <p>Habitación: {{ booking.room.name }} ({{ booking.room.room_type.name }})</p>
+    </div>
+
+    <a class="btn btn-outline-primary" href="{% url 'home' %}">Volver</a>
+    <button class="btn btn-primary" type="submit">Guardar</button>
+</form>
+{% endblock content%}

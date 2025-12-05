@@ -174,6 +174,64 @@ class EditBookingView(View):
             return redirect("/")
 
 
+class EditBookingDatesView(View):
+    def get(self, request, pk):
+        booking = Booking.objects.get(id=pk)
+        # Format dates for HTML input type="date"
+        context = {
+            'booking': booking,
+            'checkin_str': booking.checkin.strftime('%Y-%m-%d'),
+            'checkout_str': booking.checkout.strftime('%Y-%m-%d')
+        }
+        return render(request, "edit_booking_dates.html", context)
+
+    def post(self, request, pk):
+        booking = Booking.objects.get(id=pk)
+        checkin_str = request.POST.get('checkin')
+        checkout_str = request.POST.get('checkout')
+        
+        checkin = Ymd.Ymd(checkin_str)
+        checkout = Ymd.Ymd(checkout_str)
+        
+        # Basic validation
+        if (checkout - checkin) <= 0:
+             context = {
+                'booking': booking,
+                'checkin_str': checkin_str,
+                'checkout_str': checkout_str,
+                'error': "La fecha de salida debe ser posterior a la de entrada."
+            }
+             return render(request, "edit_booking_dates.html", context)
+
+        # Availability check
+        overlapping_bookings = Booking.objects.filter(
+            room=booking.room,
+            state="NEW"
+        ).exclude(id=booking.id).filter(
+            checkin__lt=checkout.date,
+            checkout__gt=checkin.date
+        )
+        
+        if overlapping_bookings.exists():
+            context = {
+                'booking': booking,
+                'checkin_str': checkin_str,
+                'checkout_str': checkout_str,
+                'error': "No hay disponibilidad para las fechas seleccionadas"
+            }
+            return render(request, "edit_booking_dates.html", context)
+            
+        # Update booking
+        booking.checkin = checkin.date
+        booking.checkout = checkout.date
+        
+        # Recalculate total
+        days = checkout - checkin
+        booking.total = days * booking.room.room_type.price
+        booking.save()
+        
+        return redirect("/")
+
 class DashboardView(View):
     def get(self, request):
         from datetime import date, time, datetime
@@ -209,13 +267,21 @@ class DashboardView(View):
                     .aggregate(Sum('total'))
                     )
 
+        total_rooms = Room.objects.count()
+        active_bookings = Booking.objects.filter(
+            state="NEW"
+        ).count()
+        occupancy_percentage = 0
+        if total_rooms > 0:
+            occupancy_percentage = (active_bookings / total_rooms) * 100
+
         # preparing context data
         dashboard = {
             'new_bookings': new_bookings,
             'incoming_guests': incoming,
             'outcoming_guests': outcoming,
-            'invoiced': invoiced
-
+            'invoiced': invoiced,
+            'occupancy_percentage': occupancy_percentage
         }
 
         context = {
@@ -238,9 +304,16 @@ class RoomDetailsView(View):
 
 class RoomsView(View):
     def get(self, request):
-        # renders a list of rooms
-        rooms = Room.objects.all().values("name", "room_type__name", "id")
+        query = request.GET.get('search')
+        if query:
+            rooms = Room.objects.filter(
+                Q(name__istartswith=f"Room {query}")
+            ).values("name", "room_type__name", "id")
+        else:
+            rooms = Room.objects.all().values("name", "room_type__name", "id")
+            
         context = {
-            'rooms': rooms
+            'rooms': rooms,
+            'search_query': query if query else ''
         }
         return render(request, "rooms.html", context)
