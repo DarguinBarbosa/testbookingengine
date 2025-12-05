@@ -1,13 +1,13 @@
 from django.test import TestCase, Client, override_settings
 from django.urls import reverse
-from .models import Room, Room_type, Booking, Customer
+from .models import Room, RoomType, Booking, Customer
 from datetime import date, timedelta
 
 @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class RoomsViewTests(TestCase):
     def setUp(self):
         self.client = Client()
-        self.rt = Room_type.objects.create(name="Single", price=50, max_guests=1)
+        self.rt = RoomType.objects.create(name="Single", price=50, max_guests=1)
         self.r1 = Room.objects.create(name="Room 101", room_type=self.rt, description="Desc")
         self.r2 = Room.objects.create(name="Room 102", room_type=self.rt, description="Desc")
         self.r3 = Room.objects.create(name="Suite 201", room_type=self.rt, description="Desc")
@@ -19,7 +19,7 @@ class RoomsViewTests(TestCase):
         response = self.client.get(reverse('rooms'), {'search': '1'})
         self.assertEqual(response.status_code, 200)
         
-        found_names = [r['name'] for r in response.context['rooms']]
+        found_names = [r.name for r in response.context['rooms']]
         self.assertIn("Room 101", found_names)
         self.assertIn("Room 102", found_names)
         self.assertNotIn("Room 2.1", found_names)
@@ -39,7 +39,7 @@ class RoomsViewTests(TestCase):
 class DashboardViewTests(TestCase):
     def setUp(self):
         self.client = Client()
-        self.rt = Room_type.objects.create(name="Single", price=50, max_guests=1)
+        self.rt = RoomType.objects.create(name="Single", price=50, max_guests=1)
         self.r1 = Room.objects.create(name="R1", room_type=self.rt, description="D")
         self.r2 = Room.objects.create(name="R2", room_type=self.rt, description="D")
         self.customer = Customer.objects.create(name="John", email="j@j.com", phone="123")
@@ -68,7 +68,7 @@ class DashboardViewTests(TestCase):
 class EditBookingDatesViewTests(TestCase):
     def setUp(self):
         self.client = Client()
-        self.rt = Room_type.objects.create(name="Single", price=50, max_guests=1)
+        self.rt = RoomType.objects.create(name="Single", price=50, max_guests=1)
         self.r1 = Room.objects.create(name="R1", room_type=self.rt, description="D")
         self.customer = Customer.objects.create(name="John", email="j@j.com", phone="123")
         self.today = date.today()

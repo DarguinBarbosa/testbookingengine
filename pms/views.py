@@ -3,8 +3,8 @@ from django.shortcuts import render, redirect
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import ensure_csrf_cookie
+from datetime import datetime
 
-from .form_dates import Ymd
 from .forms import *
 from .models import Room
 from .reservation_code import generate
@@ -42,9 +42,9 @@ class RoomSearchView(View):
     def post(self, request):
         query = request.POST.dict()
         # calculate number of days in the hotel
-        checkin = Ymd.Ymd(query['checkin'])
-        checkout = Ymd.Ymd(query['checkout'])
-        total_days = checkout - checkin
+        checkin = datetime.strptime(query['checkin'], '%Y-%m-%d').date()
+        checkout = datetime.strptime(query['checkout'], '%Y-%m-%d').date()
+        total_days = (checkout - checkin).days
         # get available rooms and total according to dates and guests
         filters = {
             'room_type__max_guests__gte': query['guests']
@@ -55,6 +55,7 @@ class RoomSearchView(View):
             'booking__state__exact': "NEW"
         }
         rooms = (Room.objects
+                 .select_related('room_type')
                  .filter(**filters)
                  .exclude(**exclude)
                  .annotate(total=total_days * F('room_type__price'))
@@ -118,11 +119,10 @@ class BookingView(View):
         # The second form is for the customer information
 
         query = request.GET.dict()
-        room = Room.objects.get(id=pk)
-        checkin = Ymd.Ymd(query['checkin'])
-        checkout = Ymd.Ymd(query['checkout'])
-        total_days = checkout - checkin
-        total = total_days * room.room_type.price  # total amount to be paid
+        room = Room.objects.select_related('room_type').get(id=pk)
+        checkin = datetime.strptime(query['checkin'], '%Y-%m-%d').date()
+        checkout = datetime.strptime(query['checkout'], '%Y-%m-%d').date()
+        total = room.calculate_price(checkin, checkout)  # total amount to be paid
         query['total'] = total
         url_query = request.GET.urlencode()
         booking_form = BookingFormExcluded(prefix="booking", initial=query)
@@ -186,15 +186,15 @@ class EditBookingDatesView(View):
         return render(request, "edit_booking_dates.html", context)
 
     def post(self, request, pk):
-        booking = Booking.objects.get(id=pk)
+        booking = Booking.objects.select_related('room__room_type').get(id=pk)
         checkin_str = request.POST.get('checkin')
         checkout_str = request.POST.get('checkout')
         
-        checkin = Ymd.Ymd(checkin_str)
-        checkout = Ymd.Ymd(checkout_str)
+        checkin = datetime.strptime(checkin_str, '%Y-%m-%d').date()
+        checkout = datetime.strptime(checkout_str, '%Y-%m-%d').date()
         
         # Basic validation
-        if (checkout - checkin) <= 0:
+        if (checkout - checkin).days <= 0:
              context = {
                 'booking': booking,
                 'checkin_str': checkin_str,
@@ -208,8 +208,8 @@ class EditBookingDatesView(View):
             room=booking.room,
             state="NEW"
         ).exclude(id=booking.id).filter(
-            checkin__lt=checkout.date,
-            checkout__gt=checkin.date
+            checkin__lt=checkout,
+            checkout__gt=checkin
         )
         
         if overlapping_bookings.exists():
@@ -222,12 +222,11 @@ class EditBookingDatesView(View):
             return render(request, "edit_booking_dates.html", context)
             
         # Update booking
-        booking.checkin = checkin.date
-        booking.checkout = checkout.date
+        booking.checkin = checkin
+        booking.checkout = checkout
         
         # Recalculate total
-        days = checkout - checkin
-        booking.total = days * booking.room.room_type.price
+        booking.total = booking.room.calculate_price(checkin, checkout)
         booking.save()
         
         return redirect("/")
@@ -306,11 +305,11 @@ class RoomsView(View):
     def get(self, request):
         query = request.GET.get('search')
         if query:
-            rooms = Room.objects.filter(
-                Q(name__istartswith=f"Room {query}")
-            ).values("name", "room_type__name", "id")
+            rooms = Room.objects.select_related('room_type').filter(
+                Q(name__istartswith=query) | Q(name__istartswith=f"Room {query}")
+            )
         else:
-            rooms = Room.objects.all().values("name", "room_type__name", "id")
+            rooms = Room.objects.select_related('room_type').all()
             
         context = {
             'rooms': rooms,

@@ -12,9 +12,9 @@ class Customer(models.Model):
         return self.name
 
 
-class Room_type(models.Model):
+class RoomType(models.Model):
     name = models.CharField(max_length=100)
-    price = models.FloatField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
     max_guests = models.IntegerField()
 
     def __str__(self):
@@ -22,12 +22,16 @@ class Room_type(models.Model):
 
 
 class Room(models.Model):
-    room_type = models.ForeignKey(Room_type, on_delete=models.SET_NULL, null=True)
+    room_type = models.ForeignKey(RoomType, on_delete=models.SET_NULL, null=True)
     name = models.CharField(max_length=100)
     description = models.CharField(max_length=500)
 
     def __str__(self):
         return self.name
+
+    def calculate_price(self, checkin, checkout):
+        days = (checkout - checkin).days
+        return self.room_type.price * days
 
 
 class Booking(models.Model):
@@ -47,7 +51,7 @@ class Booking(models.Model):
     room = models.ForeignKey(Room, on_delete=models.SET_NULL, null=True)
     guests = models.IntegerField()
     customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True)
-    total = models.FloatField()
+    total = models.DecimalField(max_digits=10, decimal_places=2)
     code = models.CharField(max_length=8)
     created = models.DateTimeField(auto_now_add=True)
 
